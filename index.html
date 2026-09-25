@@ -201,7 +201,6 @@ function initChart() {
                     display: true,
                     position: 'left',
                     beginAtZero: true,
-                    max: 2048,
                     title: { display: true, text: '内存 (MB)' }
                 },
                 yPct: {
@@ -265,7 +264,7 @@ function refreshData() {
             chart.data.labels = list.map(item => {
                 const d = new Date(item.time * 1000);
                 return currentRange <= 60
-                    ? `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`
+                    ? `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().padStart(2,'0')}`
                     : `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
             });
 
@@ -281,7 +280,7 @@ function refreshData() {
                 ds.pointStyle = showPoints ? 'circle' : 'none';
             });
 
-            chart.update('none');
+            chart.update();
         })
         .catch(() => {
             clearTimeout(timeoutId);
