@@ -1,323 +1,328 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>服务器实时监控</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { padding: 20px; font-family: system-ui, sans-serif; background: #f5f5f5; }
-    .header { margin-bottom: 16px; }
-    .offline-tip {
-        display: none;
-        background: #ff4d4f;
-        color: #fff;
-        padding: 10px 16px;
-        border-radius: 6px;
-        margin-bottom: 12px;
-        font-weight: 500;
-    }
-    .info { 
-        margin-bottom: 12px; color: #333; font-size: 14px; line-height: 1.8; 
-        columns: 2; column-gap: 20px;
-    }
-    .time-btns { margin: 12px 0; }
-    .time-btns button {
-        padding: 6px 14px; margin-right: 8px; border: 1px solid #ddd;
-        background: #fff; border-radius: 4px; cursor: pointer;
-    }
-    .time-btns button.active { background: #1677ff; color: #fff; border-color: #1677ff; }
-    .toggle-group { margin: 12px 0; }
-    .toggle-group label { 
-        margin-right: 16px; cursor: pointer; user-select: none; 
-        font-size: 14px;
-    }
-    .toggle-group input { margin-right: 4px; }
-    .chart-box { 
-        background: #fff; padding: 16px; border-radius: 8px; height: 420px;
-        position: relative;
-    }
-    .chart-offline {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(255,255,255,0.9);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        color: #999;
-        font-size: 16px;
-        border-radius: 8px;
-    }
-    #monitorChart { width: 100%; height: 100%; }
+  :root{
+    --accent:#0f6bff;
+    --bg:#f1f2f4;
+    --card:#ffffff;
+    --text:#1f2329;
+    --mute:#8a9099;
+    --border:#e3e6ea;
+    --ok:#16a34a;
+    --danger:#dc2626;
+  }
+  *{box-sizing:border-box;}
+  [hidden]{display:none !important;}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 16px 48px;}
+  h1{font-size:23px;font-weight:700;margin:0 0 16px;}
+
+  /* ===== 离线横幅 ===== */
+  .offline-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--danger);color:#fff;border-radius:6px;padding:11px 16px;
+    margin-bottom:16px;font-size:14px;box-shadow:0 2px 8px rgba(220,38,38,.25);}
+  .offline-banner .dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#fff;
+    animation:pulse 1s ease-in-out infinite;}
+  .offline-banner .txt{font-weight:600;}
+  .offline-banner .detail{font-weight:400;opacity:.92;font-size:13px;}
+  .offline-banner .retry{margin-left:auto;background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.6);
+    border-radius:4px;padding:5px 12px;font-size:13px;cursor:pointer;}
+  .offline-banner .retry:hover{background:rgba(255,255,255,.3);}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.3;transform:scale(.7);}}
+
+  .info{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 32px;margin-bottom:18px;}
+  .info .item{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .info .v{font-weight:600;}
+  body.is-offline .info .v{opacity:.4;}          /* 离线时旧数据变淡，表示已过期 */
+  body.is-offline .info{filter:grayscale(.6);}
+
+  .ranges{display:flex;flex-wrap:wrap;gap:8px;}
+  .ranges button{min-width:62px;padding:6px 14px;font-size:13px;border:1px solid transparent;border-radius:4px;
+    background:#fff;color:#333;cursor:pointer;transition:.15s;}
+  .ranges button:hover{border-color:var(--accent);color:var(--accent);}
+  .ranges button.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .toggles{display:flex;flex-wrap:wrap;gap:18px;margin:14px 0 12px;font-size:13px;}
+  .toggles label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+  .toggles input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;}
+
+  /* ===== 图表卡片 + 离线遮罩 ===== */
+  .card{position:relative;background:var(--card);border-radius:6px;
+    box-shadow:0 1px 3px rgba(0,0,0,.06);padding:8px 6px 4px;}
+  #chart{width:100%;height:430px;}
+  body.is-offline #chart{filter:grayscale(.55);}
+  .offline-mask{position:absolute;inset:0;z-index:5;border-radius:6px;
+    background:rgba(255,255,255,.75);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px;}
+  .offline-mask .big{font-size:20px;font-weight:700;color:#b91c1c;}
+  .offline-mask .sub{font-size:13px;color:#6b7280;max-width:520px;word-break:break-all;}
+
+  .status{margin-top:10px;font-size:12px;color:var(--mute);}
+  .status.ok{color:var(--ok);}
+  .status.err{color:var(--danger);}
+
+  /* ===== 恢复提示 toast ===== */
+  .flash{position:fixed;top:16px;right:16px;z-index:99;background:var(--ok);color:#fff;
+    padding:9px 16px;border-radius:6px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.16);}
+
+  @media (max-width:640px){ #chart{height:320px;} .info{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="header">
-    <h2>服务器实时监控</h2>
+  <!-- 主服务器离线提示（默认隐藏） -->
+  <div class="offline-banner" id="offlineBanner" hidden>
+    <span class="dot"></span>
+    <span>
+      <span class="txt">主服务器离线</span>
+      <span class="detail" id="offlineDetail">无法连接 api.php</span>
+    </span>
+    <button class="retry" id="retryBtn" type="button">立即重试</button>
+  </div>
+
+  <h1>服务器实时监控</h1>
+
+  <div class="info">
+    <div class="item">内存总量：<span class="v" id="i-mem-total">-</span></div>
+    <div class="item">CPU使用率：<span class="v" id="i-cpu">-</span></div>
+    <div class="item">磁盘总量：<span class="v" id="i-disk-total">-</span></div>
+    <div class="item">网卡：<span class="v" id="i-netif">-</span></div>
+    <div class="item">已用内存：<span class="v" id="i-mem-used">-</span></div>
+    <div class="item">1分钟负载：<span class="v" id="i-load">-</span></div>
+    <div class="item">磁盘使用率：<span class="v" id="i-disk-percent">-</span></div>
+    <div class="item">网络：<span class="v" id="i-net">-</span></div>
+  </div>
+
+  <div class="ranges" id="ranges"><!-- JS 渲染 --></div>
+
+  <div class="toggles">
+    <label><input type="checkbox" id="ck-mem" checked> 内存</label>
+    <label><input type="checkbox" id="ck-cpu" checked> CPU</label>
+    <label><input type="checkbox" id="ck-disk" checked> 磁盘</label>
+    <label><input type="checkbox" id="ck-net" checked> 网络</label>
+  </div>
+
+  <div class="card">
+    <div id="chart"></div>
+    <!-- 图表上的离线遮罩 -->
+    <div class="offline-mask" id="offlineMask" hidden>
+      <div class="big">主服务器离线</div>
+      <div class="sub" id="maskSub">连接 api.php 失败，正在自动重试…</div>
+    </div>
+  </div>
+
+  <div class="status" id="status">正在连接…</div>
 </div>
 
-<div class="offline-tip" id="offlineTip">⚠ 主服务器连接失败，当前处于离线状态</div>
-
-<div class="info">
-    <div>内存总量：<span id="memTotal">-</span> MB</div>
-    <div>磁盘总量：<span id="diskTotal">-</span> GB</div>
-    <div>已用内存：<span id="memUsed">-</span> MB</div>
-    <div>磁盘使用率：<span id="diskVal">-</span> %</div>
-    <div>CPU使用率：<span id="cpuVal">-</span> %</div>
-    <div>网卡：<span id="nicName">-</span></div>
-    <div>1分钟负载：<span id="loadVal">-</span></div>
-    <div>网络：↓<span id="netIn">-</span> ↑<span id="netOut">-</span> KB/s</div>
-</div>
-
-<div class="time-btns">
-    <button data-range="30" class="active">实时</button>
-    <button data-range="1800">半小时</button>
-    <button data-range="3600">1小时</button>
-    <button data-range="21600">6小时</button>
-    <button data-range="86400">24小时</button>
-</div>
-
-<div class="toggle-group">
-    <label><input type="checkbox" id="togMem" checked> 内存</label>
-    <label><input type="checkbox" id="togCpu" checked> CPU</label>
-    <label><input type="checkbox" id="togDisk" checked> 磁盘</label>
-    <label><input type="checkbox" id="togNet" checked> 网络</label>
-</div>
-
-<div class="chart-box">
-    <canvas id="monitorChart"></canvas>
-    <div class="chart-offline" id="chartOffline">服务器离线，数据加载失败</div>
-</div>
+<!-- ECharts（bootcdn 优先，失败自动换源） -->
+<script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<script>
+if (typeof echarts === 'undefined') {
+  document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"><\/script>');
+}
+</script>
 
 <script>
-let chart = null;
-let currentRange = 30;
-let isOffline = false;
-const apiUrl = 'https://xn--lrqs6h09a.cn/api.php';
+(function () {
+  'use strict';
 
-const color = {
-    mem:    { line: '#1677ff', fill: 'rgba(22, 119, 255, 0.1)' },
-    cpu:    { line: '#ff7d00', fill: 'rgba(255, 125, 0, 0.1)' },
-    disk:   { line: '#52c41a', fill: 'rgba(82, 196, 26, 0.1)' },
-    netIn:  { line: '#1677ff', fill: 'rgba(22, 119, 255, 0.08)' },
-    netOut: { line: '#ff4d4f', fill: 'rgba(255, 77, 79, 0.08)' }
-};
+  /* ================= 配置 ================= */
+  const API_BASE   = 'https://热血燃烧.cn/api.php'; // 后端接口（跨域）
+  const API_TOKEN  = '';        // 与 api.php 的 API_TOKEN 一致；不用就留空
+  const RT_MS      = 1000;      // 实时模式刷新间隔（毫秒）
+  const HIS_MS     = 5000;      // 历史模式刷新间隔（毫秒）
+  const OFFLINE_MS = 3000;      // 判定离线后的重试间隔（毫秒）
+  const TIMEOUT_MS = 5000;      // 单次请求超时（毫秒）→ 超时即视为连不上
+  const MAX_POINTS = 300;       // 实时模式最多保留点数
 
-function initChart() {
-    const ctx = document.getElementById('monitorChart').getContext('2d');
-    chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [
-                {
-                    label: '已用内存 (MB)',
-                    data: [],
-                    borderColor: color.mem.line,
-                    backgroundColor: color.mem.fill,
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.25,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointStyle: 'circle',
-                    yAxisID: 'yMem'
-                },
-                {
-                    label: 'CPU使用率 (%)',
-                    data: [],
-                    borderColor: color.cpu.line,
-                    backgroundColor: color.cpu.fill,
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.25,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointStyle: 'circle',
-                    yAxisID: 'yPct'
-                },
-                {
-                    label: '磁盘使用率 (%)',
-                    data: [],
-                    borderColor: color.disk.line,
-                    backgroundColor: color.disk.fill,
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.25,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointStyle: 'circle',
-                    yAxisID: 'yPct'
-                },
-                {
-                    label: '下载速率 (KB/s)',
-                    data: [],
-                    borderColor: color.netIn.line,
-                    backgroundColor: color.netIn.fill,
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.25,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointStyle: 'circle',
-                    yAxisID: 'yNet'
-                },
-                {
-                    label: '上传速率 (KB/s)',
-                    data: [],
-                    borderColor: color.netOut.line,
-                    backgroundColor: color.netOut.fill,
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.25,
-                    pointRadius: 3,
-                    pointHoverRadius: 5,
-                    pointStyle: 'circle',
-                    yAxisID: 'yNet'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-                x: {
-                    display: true,
-                    title: { display: true, text: '时间' },
-                    ticks: { maxTicksLimit: 10, maxRotation: 0 }
-                },
-                yMem: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    beginAtZero: true,
-                    title: { display: true, text: '内存 (MB)' }
-                },
-                yPct: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    beginAtZero: true,
-                    max: 100,
-                    title: { display: true, text: '使用率 (%)' },
-                    grid: { drawOnChartArea: false }
-                },
-                yNet: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    beginAtZero: true,
-                    title: { display: true, text: '网络 (KB/s)' },
-                    grid: { drawOnChartArea: false }
-                }
-            },
-            plugins: {
-                legend: { display: true, position: 'top' },
-                tooltip: { mode: 'index', intersect: false }
-            }
-        }
-    });
-}
+  /* ================= 曲线定义 ================= */
+  const SERIES = [
+    { key:'mem',  name:'已用内存(MB)',   color:'#2563eb', yIndex:0 },
+    { key:'cpu',  name:'CPU使用率(%)',   color:'#f59e0b', yIndex:1 },
+    { key:'disk', name:'磁盘使用率(%)',  color:'#84cc16', yIndex:1 },
+    { key:'down', name:'下载速率(KB/s)', color:'#3b82f6', yIndex:2 },
+    { key:'up',   name:'上传速率(KB/s)', color:'#ef4444', yIndex:2 }
+  ];
+  const NAME_OF = k => (SERIES.find(s => s.key === k) || {}).name;
 
-function setOffline(flag) {
-    isOffline = flag;
-    document.getElementById('offlineTip').style.display = flag ? 'block' : 'none';
-    document.getElementById('chartOffline').style.display = flag ? 'flex' : 'none';
-}
+  const CHECKS = [
+    { id:'ck-mem',  keys:['mem'] },
+    { id:'ck-cpu',  keys:['cpu'] },
+    { id:'ck-disk', keys:['disk'] },
+    { id:'ck-net',  keys:['down', 'up'] }
+  ];
 
-async function refreshData() {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    try {
-        const res = await fetch(apiUrl, { signal: controller.signal });
-        if (!res.ok) throw new Error("err");
-        const data = await res.json();
-        clearTimeout(timeoutId);
-        setOffline(false);
+  const RANGES = [
+    { key:'realtime', text:'实时' },
+    { key:'half',     text:'半小时' },
+    { key:'1h',       text:'1小时' },
+    { key:'6h',       text:'6小时' },
+    { key:'24h',      text:'24小时' }
+  ];
+  const SPAN = { realtime:0, half:1800, '1h':3600, '6h':21600, '24h':86400 };
 
-        // 更新页面文字
-        document.getElementById('memTotal').innerText = data.memTotal;
-        document.getElementById('memUsed').innerText = data.memUsed;
-        document.getElementById('cpuVal').innerText = data.cpu;
-        document.getElementById('loadVal').innerText = data.load;
-        document.getElementById('diskTotal').innerText = data.diskTotal;
-        document.getElementById('diskVal').innerText = data.diskUsage;
-        document.getElementById('nicName').innerText = data.nic;
-        document.getElementById('netIn').innerText = data.netIn;
-        document.getElementById('netOut').innerText = data.netOut;
+  /* ================= 状态 ================= */
+  let range       = 'realtime';
+  let points      = [];
+  let timer       = null;
+  let timerIv     = null;
+  let busy        = false;
+  let online      = null;        // null=未知, true=在线, false=离线
+  let lastOnlineAt= null;        // 最后一次成功通信的时间
+  let offlineSince= null;        // 开始离线的时间
+  let failReason  = '';
+  let everOnline  = false;
 
-        const now = Math.floor(Date.now() / 1000);
-        const list = data.list.filter(item => item.time >= now - currentRange);
+  const legendSelected = {};
+  SERIES.forEach(s => legendSelected[s.name] = true);
 
-        // 重点：每次生成全新数组，解决Chart.js不识别更新的BUG
-        const timeLabels = [];
-        const memData = [];
-        const cpuData = [];
-        const diskData = [];
-        const netInData = [];
-        const netOutData = [];
+  const $ = id => document.getElementById(id);
+  const chart = echarts.init($('chart'));
 
-        list.forEach(item => {
-            const d = new Date(item.time * 1000);
-            let timeStr;
-            if(currentRange <= 60){
-                timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-            }else{
-                timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-            }
-            timeLabels.push(timeStr);
-            memData.push(item.mem);
-            cpuData.push(item.cpu);
-            diskData.push(item.disk);
-            netInData.push(item.netIn);
-            netOutData.push(item.netOut);
-        });
-
-        // 直接替换dataset数组引用
-        chart.data.labels = timeLabels;
-        chart.data.datasets[0].data = memData;
-        chart.data.datasets[1].data = cpuData;
-        chart.data.datasets[2].data = diskData;
-        chart.data.datasets[3].data = netInData;
-        chart.data.datasets[4].data = netOutData;
-
-        // 强制重绘
-        chart.update();
-    } catch(e) {
-        clearTimeout(timeoutId);
-        setOffline(true);
+  /* ================= 工具 ================= */
+  function fmt(v, digits) {
+    if (v === null || v === undefined || v === '' || isNaN(v)) return '-';
+    const n = Number(v);
+    const d = digits === undefined ? (Math.abs(n) >= 1000 ? 0 : 2) : digits;
+    return n.toLocaleString('en-US', { maximumFractionDigits: d });
+  }
+  function num(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  }
+  function first(obj, keys) {
+    for (let i = 0; i < keys.length; i++) {
+      const v = obj[keys[i]];
+      if (v !== undefined && v !== null && v !== '') return v;
     }
-}
+    return null;
+  }
+  const pad2 = n => (n < 10 ? '0' + n : '' + n);
+  function hhmmss(ts) {
+    if (!ts) return '未知';
+    const d = new Date(ts);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+  function fmtTime(d, span) {
+    const hm = (span >= 21600 ? pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' : '')
+             + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    return span >= 21600 ? hm : hm + ':' + pad2(d.getSeconds());
+  }
+  function labelFrom(raw, span) {
+    if (raw === null || raw === undefined || raw === '') return fmtTime(new Date(), span);
+    if (typeof raw === 'number' || /^\d+$/.test(String(raw))) {
+      let ms = Number(raw);
+      if (ms < 1e12) ms *= 1000;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return fmtTime(d, span);
+    }
+    return String(raw);
+  }
+  function setStatus(text, cls) {
+    const el = $('status');
+    el.textContent = text;
+    el.className = 'status' + (cls ? ' ' + cls : '');
+  }
+  function showFlash(text) {
+    const el = document.createElement('div');
+    el.className = 'flash';
+    el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
 
-// 切换时间范围
-document.querySelectorAll('.time-btns button').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.time-btns button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentRange = parseInt(btn.dataset.range);
-    });
-});
+  /* ================= 离线 / 在线 状态切换 ================= */
+  function markOnline() {
+    const recovered = (online === false);
+    sharedOnlineBookkeeping();
+    online = true;
+    lastOnlineAt = Date.now();
+    offlineSince = null;
+    failReason = '';
+    everOnline = true;
 
-// 勾选框控制曲线显示隐藏
-function toggleLine(index, show) {
-    chart.data.datasets[index].hidden = !show;
-    chart.update();
-}
-document.getElementById('togMem').onchange = e => toggleLine(0, e.target.checked);
-document.getElementById('togCpu').onchange = e => toggleLine(1, e.target.checked);
-document.getElementById('togDisk').onchange = e => toggleLine(2, e.target.checked);
-document.getElementById('togNet').onchange = e => {
-    chart.data.datasets[3].hidden = !e.target.checked;
-    chart.data.datasets[4].hidden = !e.target.checked;
-    chart.update();
-};
+    document.body.classList.remove('is-offline');
+    $('offlineBanner').hidden = true;
+    $('offlineMask').hidden = true;
+    document.title = '服务器实时监控';
 
-initChart();
-refreshData();
-setInterval(refreshData, 1000);
-</script>
-</body>
-</html>
+    restartTimer();
+    if (recovered) showFlash('主服务器已恢复连接');
+  }
+
+  function markOffline(reason) {
+    const wasOnline = (online === false);
+    online = false;
+    failReason = reason;
+    if (!wasOnline) offlineSince = Date.now();   // 首次进入离线
+
+    document.body.classList.add('is-offline');
+    $('offlineBanner').hidden = false;
+    $('offlineMask').hidden = false;
+    document.title = '⚠ 主服务器离线 · 服务器实时监控';
+
+    const sec = offlineSince ? Math.floor((Date.now() - offlineSince) / 1000) : 0;
+    const txt = '无法连接 ' + API_BASE + '（' + reason + '）'
+      + ' · 最后在线 ' + (lastOnlineAt ? hhmmss(lastOnlineAt) : '未知')
+      + (everOnline ? ' · 已离线 ' + sec + ' 秒' : '');
+    $('offlineDetail').textContent = txt;
+    $('maskSub').textContent = '连接 api.php 失败：' + reason + '，正在自动重试（每 '
+      + Math.round(OFFLINE_MS / 1000) + ' 秒）…';
+    setStatus('主服务器离线 · ' + txt, 'err');
+
+    restartTimer();
+  }
+  function sharedOnlineBookkeeping() { /* 预留 */ }
+
+  // 每秒刷新“已离线 X 秒”
+  setInterval(function () {
+    if (online !== false || !offlineSince) return;
+    const sec = Math.floor((Date.now() - offlineSince) / 1000);
+    const txt = '无法连接 ' + API_BASE + '（' + failReason + '）'
+      + ' · 最后在线 ' + (lastOnlineAt ? hhmmss(lastOnlineAt) : '未知')
+      + ' · 已离线 ' + sec + ' 秒';
+    $('offlineDetail').textContent = txt;
+    setStatus('主服务器离线 · ' + txt, 'err');
+  }, 1000);
+
+  /* ================= 数据归一化 ================= */
+  function normalizeSample(raw, span) {
+    if (!raw || typeof raw !== 'object') return null;
+    const s = {
+      label:        labelFrom(first(raw, ['time', 'label', 'datetime', 'created_at', 't', 'ts', 'timestamp']), span),
+      mem_total:    num(first(raw, ['mem_total', 'memTotal', 'memory_total', 'ram_total'])),
+      mem_used:     num(first(raw, ['mem_used', 'memUsed', 'memory_used', 'ram_used', 'used_mem', 'mem'])),
+      mem_percent:  num(first(raw, ['mem_percent', 'memPercent', 'memory_percent', 'mem_usage', 'mem_rate'])),
+      disk_total:   num(first(raw, ['disk_total', 'diskTotal'])),
+      disk_used:    num(first(raw, ['disk_used', 'diskUsed'])),
+      disk_percent: num(first(raw, ['disk_percent', 'diskPercent', 'disk_usage', 'disk_rate', 'disk'])),
+      cpu:          num(first(raw, ['cpu', 'cpu_percent', 'cpuPercent', 'cpu_usage', 'cpu_rate'])),
+      load1:        num(first(raw, ['load1', 'load_1', 'loadavg', 'load_avg_1', 'load'])),
+      net_if:       first(raw, ['net_if', 'netif', 'nic', 'iface', 'interface', 'net_card']) || '',
+      net_down:     num(first(raw, ['net_down', 'netDown', 'down', 'download', 'rx', 'rx_kbs', 'down_kbs'])),
+      net_up:       num(first(raw, ['net_up', 'netUp', 'up', 'upload', 'tx', 'tx_kbs', 'up_kbs']))
+    };
+    if (s.mem_percent === null && s.mem_total && s.mem_used !== null) {
+      s.mem_percent = s.mem_used / s.mem_total * 100;
+    }
+    return s;
+  }
+  const toPoint = s => ({ label:s.label, mem:s.mem_used, cpu:s.cpu, disk:s.disk_percent, down:s.net_down, up:s.net_up });
+
+  function unwrap(json) {
+    if (json && typeof json === 'object' && ('code' in json || 'success' in json || 'status' in json)) {
+      const ok = json.code === 0 || json.code === 200 || json.code === '0'
+              || json.success === true || json.status === true || json.status === 'ok';
+      if (!ok) throw new Error(json.message || json.msg || '接口返回失败');
+      return ('data' in json) ? json.data : json;
+    }
+    return json;
+  }
+
+  /* ================= 顶部
