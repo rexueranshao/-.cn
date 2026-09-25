@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>服务器实时监控</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { padding: 20px; font-family: system-ui, sans-serif; background: #f5f5f5; }
+    .header { margin-bottom: 16px; }
+    .offline-tip {
+        display: none;
+        background: #ff4d4f;
+        color: #fff;
+        padding: 10px 16px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        font-weight: 500;
+    }
+    .info { 
+        margin-bottom: 12px; color: #333; font-size: 14px; line-height: 1.8; 
+        columns: 2; column-gap: 20px;
+    }
+    .time-btns { margin: 12px 0; }
+    .time-btns button {
+        padding: 6px 14px; margin-right: 8px; border: 1px solid #ddd;
+        background: #fff; border-radius: 4px; cursor: pointer;
+    }
+    .time-btns button.active { background: #1677ff; color: #fff; border-color: #1677ff; }
+    .toggle-group { margin: 12px 0; }
+    .toggle-group label { 
+        margin-right: 16px; cursor: pointer; user-select: none; 
+        font-size: 14px;
+    }
+    .toggle-group input { margin-right: 4px; }
+    .chart-box { 
+        background: #fff; padding: 16px; border-radius: 8px; height: 420px;
+        position: relative;
+    }
+    .chart-offline {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,0.9);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+    #monitorChart { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h2>服务器实时监控</h2>
+</div>
+
+<div class="offline-tip" id="offlineTip">⚠ 主服务器连接失败，当前处于离线状态</div>
+
+<div class="info">
+    <div>内存总量：<span id="memTotal">-</span> MB</div>
+    <div>磁盘总量：<span id="diskTotal">-</span> GB</div>
+    <div>已用内存：<span id="memUsed">-</span> MB</div>
+    <div>磁盘使用率：<span id="diskVal">-</span> %</div>
+    <div>CPU使用率：<span id="cpuVal">-</span> %</div>
+    <div>网卡：<span id="nicName">-</span></div>
+    <div>1分钟负载：<span id="loadVal">-</span></div>
+    <div>网络：↓<span id="netIn">-</span> ↑<span id="netOut">-</span> KB/s</div>
+</div>
+
+<div class="time-btns">
+    <button data-range="30" class="active">实时</button>
+    <button data-range="1800">半小时</button>
+    <button data-range="3600">1小时</button>
+    <button data-range="21600">6小时</button>
+    <button data-range="86400">24小时</button>
+</div>
+
+<div class="toggle-group">
+    <label><input type="checkbox" id="togMem" checked> 内存</label>
+    <label><input type="checkbox" id="togCpu" checked> CPU</label>
+    <label><input type="checkbox" id="togDisk" checked> 磁盘</label>
+    <label><input type="checkbox" id="togNet" checked> 网络</label>
+</div>
+
+<div class="chart-box">
+    <canvas id="monitorChart"></canvas>
+    <div class="chart-offline" id="chartOffline">服务器离线，数据加载失败</div>
+</div>
+
+<script>
+let chart = null;
+let currentRange = 30;
+let isOffline = false;
+// ========== 改成你的主服务器完整API地址 ==========
+const apiUrl = 'https://你的主服务器域名/api.php';
+// ========================================================
+
+const color = {
+    mem:    { line: '#1677ff', fill: 'rgba(22, 119, 255, 0.1)' },
+    cpu:    { line: '#ff7d00', fill: 'rgba(255, 125, 0, 0.1)' },
+    disk:   { line: '#52c41a', fill: 'rgba(82, 196, 26, 0.1)' },
+    netIn:  { line: '#1677ff', fill: 'rgba(22, 119, 255, 0.08)' },
+    netOut: { line: '#ff4d4f', fill: 'rgba(255, 77, 79, 0.08)' }
+};
+
+function initChart() {
+    const ctx = document.getElementById('monitorChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: '已用内存 (MB)',
+                    data: [],
+                    borderColor: color.mem.line,
+                    backgroundColor: color.mem.fill,
+                    pointBackgroundColor: color.mem.line,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointStyle: 'circle',
+                    yAxisID: 'yMem'
+                },
+                {
+                    label: 'CPU使用率 (%)',
+                    data: [],
+                    borderColor: color.cpu.line,
+                    backgroundColor: color.cpu.fill,
+                    pointBackgroundColor: color.cpu.line,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointStyle: 'circle',
+                    yAxisID: 'yPct'
+                },
+                {
+                    label: '磁盘使用率 (%)',
+                    data: [],
+                    borderColor: color.disk.line,
+                    backgroundColor: color.disk.fill,
+                    pointBackgroundColor: color.disk.line,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointStyle: 'circle',
+                    yAxisID: 'yPct'
+                },
+                {
+                    label: '下载速率 (KB/s)',
+                    data: [],
+                    borderColor: color.netIn.line,
+                    backgroundColor: color.netIn.fill,
+                    pointBackgroundColor: color.netIn.line,
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointStyle: 'circle',
+                    yAxisID: 'yNet'
+                },
+                {
+                    label: '上传速率 (KB/s)',
+                    data: [],
+                    borderColor: color.netOut.line,
+                    backgroundColor: color.netOut.fill,
+                    pointBackgroundColor: color.netOut.line,
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.25,
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    pointStyle: 'circle',
+                    yAxisID: 'yNet'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    display: true,
+                    title: { display: true, text: '时间' },
+                    ticks: { maxTicksLimit: 10, maxRotation: 0 }
+                },
+                yMem: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    beginAtZero: true,
+                    max: 2048,
+                    title: { display: true, text: '内存 (MB)' }
+                },
+                yPct: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    beginAtZero: true,
+                    max: 100,
+                    title: { display: true, text: '使用率 (%)' },
+                    grid: { drawOnChartArea: false }
+                },
+                yNet: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    beginAtZero: true,
+                    title: { display: true, text: '网络 (KB/s)' },
+                    grid: { drawOnChartArea: false }
+                }
+            },
+            plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { mode: 'index', intersect: false }
+            }
+        }
+    });
+}
+
+function setOffline(flag) {
+    isOffline = flag;
+    document.getElementById('offlineTip').style.display = flag ? 'block' : 'none';
+    document.getElementById('chartOffline').style.display = flag ? 'flex' : 'none';
+}
+
+function refreshData() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+
+    fetch(apiUrl, { signal: controller.signal })
+        .then(res => {
+            if (!res.ok) throw new Error('请求失败');
+            return res.json();
+        })
+        .then(data => {
+            clearTimeout(timeoutId);
+            setOffline(false);
+
+            document.getElementById('memTotal').innerText = data.memTotal;
+            document.getElementById('memUsed').innerText = data.memUsed;
+            document.getElementById('cpuVal').innerText = data.cpu;
+            document.getElementById('loadVal').innerText = data.load;
+            document.getElementById('diskTotal').innerText = data.diskTotal;
+            document.getElementById('diskVal').innerText = data.diskUsage;
+            document.getElementById('nicName').innerText = data.nic;
+            document.getElementById('netIn').innerText = data.netIn;
+            document.getElementById('netOut').innerText = data.netOut;
+
+            const now = Math.floor(Date.now() / 1000);
+            const list = data.list.filter(item => item.time >= now - currentRange);
+
+            chart.data.labels = list.map(item => {
+                const d = new Date(item.time * 1000);
+                return currentRange <= 60
+                    ? `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`
+                    : `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            });
+
+            chart.data.datasets[0].data = list.map(item => item.mem);
+            chart.data.datasets[1].data = list.map(item => item.cpu);
+            chart.data.datasets[2].data = list.map(item => item.disk);
+            chart.data.datasets[3].data = list.map(item => item.netIn);
+            chart.data.datasets[4].data = list.map(item => item.netOut);
+
+            // 每次刷新同步点显隐逻辑
+            const showPoints = currentRange <= 30;
+            chart.data.datasets.forEach(ds => {
+                ds.pointStyle = showPoints ? 'circle' : 'none';
+            });
+
+            chart.update('none');
+        })
+        .catch(() => {
+            clearTimeout(timeoutId);
+            setOffline(true);
+        });
+}
+
+// 时间范围切换
+document.querySelectorAll('.time-btns button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.time-btns button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentRange = parseInt(btn.dataset.range);
+        refreshData();
+    });
+});
+
+// 指标开关
+function toggleLine(index, show) {
+    chart.data.datasets[index].hidden = !show;
+    chart.update();
+}
+document.getElementById('togMem').addEventListener('change', e => toggleLine(0, e.target.checked));
+document.getElementById('togCpu').addEventListener('change', e => toggleLine(1, e.target.checked));
+document.getElementById('togDisk').addEventListener('change', e => toggleLine(2, e.target.checked));
+document.getElementById('togNet').addEventListener('change', e => {
+    // 网络同时控制上下行两条线
+    chart.data.datasets[3].hidden = !e.target.checked;
+    chart.data.datasets[4].hidden = !e.target.checked;
+    chart.update();
+});
+
+initChart();
+refreshData();
+setInterval(refreshData, 1000);
+</script>
+
+</body>
+</html>
