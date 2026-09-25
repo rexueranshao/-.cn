@@ -94,9 +94,7 @@
 let chart = null;
 let currentRange = 30;
 let isOffline = false;
-// ========== 改成你的主服务器完整API地址 ==========
 const apiUrl = 'https://xn--lrqs6h09a.cn/api.php';
-// ========================================================
 
 const color = {
     mem:    { line: '#1677ff', fill: 'rgba(22, 119, 255, 0.1)' },
@@ -118,7 +116,6 @@ function initChart() {
                     data: [],
                     borderColor: color.mem.line,
                     backgroundColor: color.mem.fill,
-                    pointBackgroundColor: color.mem.line,
                     borderWidth: 2,
                     fill: true,
                     tension: 0.25,
@@ -132,7 +129,6 @@ function initChart() {
                     data: [],
                     borderColor: color.cpu.line,
                     backgroundColor: color.cpu.fill,
-                    pointBackgroundColor: color.cpu.line,
                     borderWidth: 2,
                     fill: true,
                     tension: 0.25,
@@ -146,7 +142,6 @@ function initChart() {
                     data: [],
                     borderColor: color.disk.line,
                     backgroundColor: color.disk.fill,
-                    pointBackgroundColor: color.disk.line,
                     borderWidth: 2,
                     fill: true,
                     tension: 0.25,
@@ -160,7 +155,6 @@ function initChart() {
                     data: [],
                     borderColor: color.netIn.line,
                     backgroundColor: color.netIn.fill,
-                    pointBackgroundColor: color.netIn.line,
                     borderWidth: 2,
                     fill: false,
                     tension: 0.25,
@@ -174,7 +168,6 @@ function initChart() {
                     data: [],
                     borderColor: color.netOut.line,
                     backgroundColor: color.netOut.fill,
-                    pointBackgroundColor: color.netOut.line,
                     borderWidth: 2,
                     fill: false,
                     tension: 0.25,
@@ -235,88 +228,96 @@ function setOffline(flag) {
     document.getElementById('chartOffline').style.display = flag ? 'flex' : 'none';
 }
 
-function refreshData() {
+async function refreshData() {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+        const res = await fetch(apiUrl, { signal: controller.signal });
+        if (!res.ok) throw new Error("err");
+        const data = await res.json();
+        clearTimeout(timeoutId);
+        setOffline(false);
 
-    fetch(apiUrl, { signal: controller.signal })
-        .then(res => {
-            if (!res.ok) throw new Error('请求失败');
-            return res.json();
-        })
-        .then(data => {
-            clearTimeout(timeoutId);
-            setOffline(false);
+        // 更新页面文字
+        document.getElementById('memTotal').innerText = data.memTotal;
+        document.getElementById('memUsed').innerText = data.memUsed;
+        document.getElementById('cpuVal').innerText = data.cpu;
+        document.getElementById('loadVal').innerText = data.load;
+        document.getElementById('diskTotal').innerText = data.diskTotal;
+        document.getElementById('diskVal').innerText = data.diskUsage;
+        document.getElementById('nicName').innerText = data.nic;
+        document.getElementById('netIn').innerText = data.netIn;
+        document.getElementById('netOut').innerText = data.netOut;
 
-            document.getElementById('memTotal').innerText = data.memTotal;
-            document.getElementById('memUsed').innerText = data.memUsed;
-            document.getElementById('cpuVal').innerText = data.cpu;
-            document.getElementById('loadVal').innerText = data.load;
-            document.getElementById('diskTotal').innerText = data.diskTotal;
-            document.getElementById('diskVal').innerText = data.diskUsage;
-            document.getElementById('nicName').innerText = data.nic;
-            document.getElementById('netIn').innerText = data.netIn;
-            document.getElementById('netOut').innerText = data.netOut;
+        const now = Math.floor(Date.now() / 1000);
+        const list = data.list.filter(item => item.time >= now - currentRange);
 
-            const now = Math.floor(Date.now() / 1000);
-            const list = data.list.filter(item => item.time >= now - currentRange);
+        // 重点：每次生成全新数组，解决Chart.js不识别更新的BUG
+        const timeLabels = [];
+        const memData = [];
+        const cpuData = [];
+        const diskData = [];
+        const netInData = [];
+        const netOutData = [];
 
-            chart.data.labels = list.map(item => {
-                const d = new Date(item.time * 1000);
-                return currentRange <= 60
-                    ? `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().padStart(2,'0')}`
-                    : `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-            });
-
-            chart.data.datasets[0].data = list.map(item => item.mem);
-            chart.data.datasets[1].data = list.map(item => item.cpu);
-            chart.data.datasets[2].data = list.map(item => item.disk);
-            chart.data.datasets[3].data = list.map(item => item.netIn);
-            chart.data.datasets[4].data = list.map(item => item.netOut);
-
-            // 每次刷新同步点显隐逻辑
-            const showPoints = currentRange <= 30;
-            chart.data.datasets.forEach(ds => {
-                ds.pointStyle = showPoints ? 'circle' : 'none';
-            });
-
-            chart.update();
-        })
-        .catch(() => {
-            clearTimeout(timeoutId);
-            setOffline(true);
+        list.forEach(item => {
+            const d = new Date(item.time * 1000);
+            let timeStr;
+            if(currentRange <= 60){
+                timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+            }else{
+                timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+            }
+            timeLabels.push(timeStr);
+            memData.push(item.mem);
+            cpuData.push(item.cpu);
+            diskData.push(item.disk);
+            netInData.push(item.netIn);
+            netOutData.push(item.netOut);
         });
+
+        // 直接替换dataset数组引用
+        chart.data.labels = timeLabels;
+        chart.data.datasets[0].data = memData;
+        chart.data.datasets[1].data = cpuData;
+        chart.data.datasets[2].data = diskData;
+        chart.data.datasets[3].data = netInData;
+        chart.data.datasets[4].data = netOutData;
+
+        // 强制重绘
+        chart.update();
+    } catch(e) {
+        clearTimeout(timeoutId);
+        setOffline(true);
+    }
 }
 
-// 时间范围切换
+// 切换时间范围
 document.querySelectorAll('.time-btns button').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.time-btns button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentRange = parseInt(btn.dataset.range);
-        refreshData();
     });
 });
 
-// 指标开关
+// 勾选框控制曲线显示隐藏
 function toggleLine(index, show) {
     chart.data.datasets[index].hidden = !show;
     chart.update();
 }
-document.getElementById('togMem').addEventListener('change', e => toggleLine(0, e.target.checked));
-document.getElementById('togCpu').addEventListener('change', e => toggleLine(1, e.target.checked));
-document.getElementById('togDisk').addEventListener('change', e => toggleLine(2, e.target.checked));
-document.getElementById('togNet').addEventListener('change', e => {
-    // 网络同时控制上下行两条线
+document.getElementById('togMem').onchange = e => toggleLine(0, e.target.checked);
+document.getElementById('togCpu').onchange = e => toggleLine(1, e.target.checked);
+document.getElementById('togDisk').onchange = e => toggleLine(2, e.target.checked);
+document.getElementById('togNet').onchange = e => {
     chart.data.datasets[3].hidden = !e.target.checked;
     chart.data.datasets[4].hidden = !e.target.checked;
     chart.update();
-});
+};
 
 initChart();
 refreshData();
 setInterval(refreshData, 1000);
 </script>
-
 </body>
 </html>
